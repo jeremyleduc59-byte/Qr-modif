@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>QR Pro Qty</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bwip-js@3/dist/bwip-js-min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 15px; background: #f0f4f8; margin: 0; }
+        .card { background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        #video { width: 100%; max-width: 400px; border-radius: 10px; display: none; background: #000; }
+        .btn { display: block; width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; text-decoration: none; }
+        .btn-blue { background: #1d6aff; color: white; }
+        .btn-green { background: #10b981; color: white; }
+        .btn-outline { background: #eee; color: #444; }
+        input { width: 100%; font-size: 32px; text-align: center; border: 2px solid #1d6aff; border-radius: 10px; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+        .raw-text { font-family: monospace; font-size: 10px; color: #666; word-break: break-all; background: #f8f9fa; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h3>📷 SCANNER</h3>
+        <video id="video" playsinline></video>
+        <button id="start-btn" class="btn btn-blue" onclick="startScan()">▶ Start Camera</button>
+    </div>
+
+    <div id="edit-zone" class="card" style="display:none">
+        <h3>📦 MODIFICATION (Q)</h3>
+        <p>Original: <span id="old-data" style="font-size:10px; color:gray;"></span></p>
+        <label>New Qty:</label>
+        <input type="number" id="qty-input" oninput="generate()">
+        <div id="qr-output" style="margin-top:20px; max-width: 100%;"></div>
+        <button class="btn btn-green" onclick="download()">💾 Save Image</button>
+        <button class="btn btn-outline" onclick="location.reload()">🔄 New Scan</button>
+    </div>
+
+    <script>
+        let reader = new ZXing.BrowserMultiFormatReader();
+        let rawText = "";
+
+        async function startScan() {
+            document.getElementById('video').style.display = 'block';
+            document.getElementById('start-btn').style.display = 'none';
+            reader.decodeFromVideoDevice(null, 'video', (result, err) => {
+                if (result) {
+                    rawText = result.text;
+                    reader.reset();
+                    document.getElementById('video').style.display = 'none';
+                    document.getElementById('edit-zone').style.display = 'block';
+                    document.getElementById('old-data').innerText = rawText;
+                    let m = rawText.match(/Q(\d+)/);
+                    if (m) document.getElementById('qty-input').value = m[1];
+                    generate();
+                }
+            });
+        }
+
+        function generate() {
+            let q = document.getElementById('qty-input').value;
+            if (!rawText) return;
+            
+            let modified = rawText.replace(/Q\d+/, "Q" + q);
+            let out = document.getElementById('qr-output');
+            out.innerHTML = ""; 
+
+            let canvas = document.createElement('canvas');
+            try {
+                bwipjs.toCanvas(canvas, {
+                    bcid: 'datamatrix', 
+                    text: modified, 
+                    scale: 5, 
+                    padding: 10
+                }, (err, cvs) => {
+                    if (!err) {
+                        out.appendChild(cvs);
+                    }
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function download() {
+            let cvs = document.querySelector('canvas');
+            if (!cvs) return;
+            let a = document.createElement('a');
+            a.download = "code_modifie.png"; 
+            a.href = cvs.toDataURL(); 
+            a.click();
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</body>
+</html>
