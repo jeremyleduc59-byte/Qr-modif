@@ -16,7 +16,7 @@
         .btn-green { background: #10b981; color: white; }
         .btn-outline { background: #eee; color: #444; }
         input { width: 100%; font-size: 32px; text-align: center; border: 2px solid #1d6aff; border-radius: 10px; padding: 10px; margin: 10px 0; box-sizing: border-box; }
-        .raw-text { font-family: monospace; font-size: 10px; color: #666; word-break: break-all; background: #f8f9fa; padding: 10px; border-radius: 5px; }
+        .raw-text { font-family: monospace; font-size: 10px; color: #666; word-break: break-all; background: #f8f9fa; padding: 10px; border-radius: 5px; height: 60px; overflow: auto; text-align: left; }
     </style>
 </head>
 <body>
@@ -28,40 +28,52 @@
 
     <div id="edit-zone" class="card" style="display:none">
         <h3>📦 MODIFICATION (Q)</h3>
-        <p>Original: <span id="old-data" style="font-size:10px; color:gray;"></span></p>
-        <label>New Qty:</label>
+        <div class="raw-text" id="old-data"></div>
+        <label>Nouvelle Quantité :</label>
         <input type="number" id="qty-input" oninput="generate()">
-        <div id="qr-output" style="margin-top:20px; max-width: 100%;"></div>
-        <button class="btn btn-green" onclick="download()">💾 Save Image</button>
-        <button class="btn btn-outline" onclick="location.reload()">🔄 New Scan</button>
+        <div id="qr-output" style="margin-top:20px; display: flex; justify-content: center; min-height: 150px;"></div>
+        <button class="btn btn-green" onclick="download()">💾 Sauvegarder l'image</button>
+        <button class="btn btn-outline" onclick="location.reload()">🔄 Nouveau Scan</button>
     </div>
 
     <script>
         let reader = new ZXing.BrowserMultiFormatReader();
-        let rawText = "";
+        let rawDataArray = null; // On stocke les données brutes ici
 
         async function startScan() {
             document.getElementById('video').style.display = 'block';
             document.getElementById('start-btn').style.display = 'none';
+            
+            // On utilise une méthode qui préserve mieux les caractères spéciaux
             reader.decodeFromVideoDevice(null, 'video', (result, err) => {
                 if (result) {
-                    rawText = result.text;
+                    // On récupère le texte avec ses caractères invisibles
+                    let text = result.text;
+                    // On convertit en tableau de nombres pour ne perdre aucun octet (GS, RS, etc.)
+                    rawDataArray = Array.from(text).map(c => c.charCodeAt(0));
+                    
                     reader.reset();
                     document.getElementById('video').style.display = 'none';
                     document.getElementById('edit-zone').style.display = 'block';
-                    document.getElementById('old-data').innerText = rawText;
-                    let m = rawText.match(/Q(\d+)/);
+                    document.getElementById('old-data').innerText = text.replace(/[\x00-\x1F]/g, (match) => `[${match.charCodeAt(0)}]`);
+                    
+                    // On cherche le Q pour pré-remplir l'input
+                    let m = text.match(/Q(\d+)/);
                     if (m) document.getElementById('qty-input').value = m[1];
+                    
                     generate();
                 }
             });
         }
 
         function generate() {
+            if (!rawDataArray) return;
             let q = document.getElementById('qty-input').value;
-            if (!rawText) return;
             
-            let modified = rawText.replace(/Q\d+/, "Q" + q);
+            // Reconstruction du texte avec les caractères invisibles préservés
+            let text = String.fromCharCode(...rawDataArray);
+            let modified = text.replace(/Q\d+/, "Q" + q);
+            
             let out = document.getElementById('qr-output');
             out.innerHTML = ""; 
 
@@ -71,10 +83,14 @@
                     bcid: 'datamatrix', 
                     text: modified, 
                     scale: 5, 
-                    padding: 10
+                    padding: 10,
+                    // Cette option est VITAL : elle dit à BWIP de traiter les caractères spéciaux
+                    parsefnc: false 
                 }, (err, cvs) => {
                     if (!err) {
                         out.appendChild(cvs);
+                    } else {
+                        out.innerHTML = "<span style='color:red'>Erreur : " + err + "</span>";
                     }
                 });
             } catch (e) {
